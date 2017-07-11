@@ -3,7 +3,7 @@ import types
 import inspect
 
 
-def describe(article, value, name=None, verbose=False, capital=False):
+def describe(article, value, name=None, verbose=False, capital=None):
     """Return string that describes a value
 
     Parameters
@@ -60,6 +60,9 @@ def describe(article, value, name=None, verbose=False, capital=False):
     >>> describe("the", object, "I will use")
     'the object I will use'
     """
+    if capital is None and article is not None:
+        capital = article[0].lower() != article[0]
+
     if isinstance(article, str):
         article = article.lower()
 

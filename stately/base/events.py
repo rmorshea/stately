@@ -6,7 +6,7 @@ if six.PY3:
     import asyncio
 
 
-class EngineConstructor(type):
+class MetaEngine(type):
 
     def __init__(cls, name, bases, classdict):
         cls._cycle = []
@@ -21,7 +21,7 @@ class EngineConstructor(type):
                 return c.blueprint[rotation]
 
 
-class Engine(object, metaclass=EngineConstructor):
+class Engine(object, metaclass=MetaEngine):
 
     status = None
     blueprint = {None: None}
@@ -113,30 +113,71 @@ def run(engine, *args, **kwargs):
     return result
 
 
-@contextmanager
-def locked(engine):
-    hold = lock(engine)
-    try:
-        yield
-    except:
-        raise
-    finally:
-        unlock(engine, hold)
+async def run_futures(engine, *args, **kwargs):
+    result = None
+    for _result in engine(*args, **kwargs):
+        if inspect.iscoroutine(_result):
+            result = await _result
+    return result
 
 
-def lock(engine):
-    hold = engine.__class__
-    engine.__class__ = Locker
-    return hold
-
-def unlock(engine, etype):
-    engine.__dict__["__class__"] = etype
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Events Objects  - - - - - - - - - - - - - - - - - - - - - - - -
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 
-class Locker(object):
+class MetaEvent(MetaEngine):
 
-    def __setattr__(self, name, value):
-        raise AttributeError("%r has been locked" % self)
+    def __init__(cls, name, bases, classdict):
+        super(MetaEvent, cls).__init__(name, bases, classdict)
+        if "subtypename" in classdict and classdict["subtypename"] is not None:
+            cls.subtypename_lineage = cls.subtypename_lineage + [classdict["subtypename"]]
+        cls.typename_lineage = tuple(" ".join(reversed(cls.subtypename_lineage[:i]))
+            for i in range(1, len(cls.subtypename_lineage) + 1))
+        cls.typename = cls.typename_lineage[-1]
 
-    def __delattr__(self, name):
-        raise AttributeError("%r has been locked" % self)
+
+class Event(Engine, metaclass=MetaEvent):
+    
+    blueprint = {
+        None: "pending",
+        "pending": "working",
+        "working": "done",
+        "done": None
+    }
+
+    subtypename = "event"
+    subtypename_lineage = []
+
+    def __init__(self, data, **attrs):
+        self.data = data
+        for k, v in attrs.items():
+            setattr(self, k, v)
+
+    @property
+    def get_value(self):
+        return self.data.get_value
+
+    @property
+    def set_value(self):
+        return self.data.set_value
+
+    @property
+    def del_value(self):
+        return self.data.del_value
+
+    @property
+    def get_value_or(self):
+        return self.data.get_value_or
+
+    def rollback(self):
+        pass
+
+    def __repr__(self):
+        info = {}
+        for k, v in self.__dict__.items():
+            if not k.startswith("_"):
+                info[k] = v
+        cls = type(self)
+        name = cls.__module__ + "." + cls.__name__
+        return "%s(%s)" % (name, str(info)[1:-1])

@@ -1,6 +1,20 @@
 import sys
 import inspect
+import functools
 from .interpret import describe
+from future.utils import raise_ as raises
+
+
+def last_traceback():
+    return sys.exc_info()[2]
+
+
+class Exceptions(Exception):
+
+    def __init__(self, *errors, **kwargs):
+        prefix = kwargs.get("prefix", "")
+        strings = ("%s(%s)" % (type(e).__name__, str(e)) for e in errors)
+        super(Exceptions, self).__init__(prefix + ", ".join(strings))
 
 
 class Sentinel(object):
@@ -20,23 +34,10 @@ class Sentinel(object):
         return self.name
 
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Python < 3.6 - PEP 487 Descriptor Compatibility - - - - - - - -
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-
-if sys.version_info >= (3, 6):
-    Metaclass = type
-else:
-    class Metaclass(type):
-        def __init__(cls, name, bases, classdict):
-            for k, v in classdict.items():
-                if isinstance(v, Descriptor):
-                    v.__set_name__(cls, k)
-
-
-class Descriptor(object):
-
-    def __set_name__(self, cls, name):
-        self.owner = cls
-        self.name = name
+def decoration(function):
+    @functools.wraps(function)
+    def wrapper(*args, **kwargs):
+        def setup(thing):
+            return function(thing, *args, **kwargs)
+        return setup
+    return wrapper
