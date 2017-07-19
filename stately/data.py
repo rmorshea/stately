@@ -1,19 +1,32 @@
+import functools
 from warnings import WarningMessage
 from contextlib import contextmanager
 
+from .utils import describe
+
 from .base.proxies import ProxyManyDescriptors
-from .base.events import Event, before, after, between
+from .base.events import EventModel, before, after, between
 from .base.model import ObjectModel, DataModel, DataError, Undefined
 
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Data Descriptor And Owner - - - - - - - - - - - - - - - - - - -
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# ---------------------------------------------------------------
+# Data Descriptor, Event, and Owner -----------------------------
+# ---------------------------------------------------------------
 
 
 class RollbackWarning(WarningMessage):
     """A warning which is raised when a data event fails to revert changes"""
     pass
+
+
+class Event(EventModel):
+
+    def __init__(self, data, **attrs):
+        super(Event, self).__init__(data=data, name=data.name, **attrs)
+        self.data = data
+
+    def model(self, obj):
+        return self.data.model(obj)
 
 
 class HasData(ObjectModel):
@@ -78,10 +91,10 @@ class Data(DataModel):
     def authorize(self, value):
         pass
 
-    def __set__(self, obj, val):
+    def set_value(self, obj, val):
         self.event_outcome("Set", obj, new=val)
 
-    def __delete__(self, obj):
+    def del_value(self, obj):
         self.event_outcome("Del", obj)
 
     def event_outcome(self, name, obj, **attrs):
@@ -98,32 +111,32 @@ class Data(DataModel):
         subtypename = "set"
 
         def pending(self, obj):
-            self.old = self.get_value_or(obj, Undefined)
+            self.old = self.model(obj).get(self.name, Undefined)
 
         @between("pending", "working")
         def validating(self, obj):
             self.new = self.data.validate(self.new)
 
         def working(self, obj):
-            self.set_value(obj, self.new)
+            self.model(obj)[self.name] = self.new
 
         def rollback(self, obj):
             if self.old is not Undefined:
-                self.set_value(obj, self.old)
+                self.model(obj)[self.name] = self.old
 
     class Del(Event):
 
         subtypename = "del"
 
         def pending(self, obj):
-            self.old = self.get_value_or(obj, Undefined)
+            self.old = self.model(obj).get(self.name, Undefined)
 
         def working(self, obj):
-            self.del_value(obj)
+            del self.model(obj)[self.name]
 
         def rollback(self, obj):
             if self.old is not Undefined:
-                self.set_value(obj, self.old)
+                self.model(obj)[self.name] = self.old
 
     def __or__(self, other):
         if isinstance(other, Union):
@@ -134,15 +147,12 @@ class Data(DataModel):
             raise TypeError("Cannot form a Union between non-Data types")
 
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Basic Data Subclasses - - - - - - - - - - - - - - - - - - - - -
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# ---------------------------------------------------------------
+# Basic Data Subclasses -----------------------------------------
+# ---------------------------------------------------------------
 
 
 class Union(ProxyManyDescriptors, DataModel):
-
-    def __init__(self, *data, **kwargs):
-        super(Union, self).__init__(*data, **kwargs)
     
     def __or__(self, other):
         if isinstance(other, Data):
@@ -167,7 +177,7 @@ class DataType(Data):
         elif self.datatype is None:
             raise TypeError("%s has no given 'datatype'" % describe("The", type(self)))
 
-    def _constructor(self, *args, **kwargs):
+    def constructor(self, *args, **kwargs):
         return self.datatype(*args, **kwargs)
 
 
@@ -175,7 +185,7 @@ class Subclass(DataType):
 
     def authorize(self, value):
         if not issubclass(value, self.datatype):
-            raise DataError("Expected %s, not %r" % (
+            raise DataError("Expected %s, not %s" % (
                 describe("a", self.datatype, "subclass"),
                 describe("the", value)))
 
@@ -184,11 +194,11 @@ class Instance(DataType):
 
     def authorize(self, value):
         if not isinstance(value, self.datatype):
-            raise DataError("Expected %s, not %r" % (
+            raise DataError("Expected %s, not %s" % (
                 describe("a", self.datatype),
                 describe("the", value)))
 
 
 class This(Instance):
 
-    _constructor = "__class__"
+    constructor = "__class__"

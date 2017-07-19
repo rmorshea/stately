@@ -1,6 +1,19 @@
 import re
 import types
 import inspect
+import textwrap
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Object Representations  - - - - - - - - - - - - - - - - - - - -
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+def fullname(cls, attr=None):
+    name = cls.__module__ + "." + cls.__name__
+    if attr is not None:
+        name += "." + attr
+    return name
 
 
 def describe(article, value, name=None, verbose=False, capital=None):
@@ -66,12 +79,9 @@ def describe(article, value, name=None, verbose=False, capital=None):
     if isinstance(article, str):
         article = article.lower()
 
-    if not inspect.isclass(value):
-        typename = type(value).__name__
-    else:
-        typename = value.__name__
+    typename = type(value).__name__
     if verbose:
-        typename = _prefix(value) + typename
+        typename = _prefix(type(value)) + typename
 
     if article == "the" or (article is None and not inspect.isclass(value)):
         if name is not None:
@@ -83,26 +93,24 @@ def describe(article, value, name=None, verbose=False, capital=None):
         else:
             tick_wrap = False
             if inspect.isclass(value):
-                name = value.__name__
+                name = _prefix(value) + value.__name__
             elif isinstance(value, types.FunctionType):
-                name = value.__name__
+                name = _prefix(value) + value.__name__
                 tick_wrap = True
             elif isinstance(value, types.MethodType):
-                name = value.__func__.__name__
+                name = _prefix(value) + value.__func__.__name__
                 tick_wrap = True
             elif type(value).__repr__ in (object.__repr__, type.__repr__):
                 name = "at '%s'" % hex(id(value))
-                verbose = False
             else:
                 name = repr(value)
-                verbose = False
-            if verbose:
-                name = _prefix(value) + name
             if tick_wrap:
                 name = name.join("''")
             return describe(article, value, name=name,
                 verbose=verbose, capital=capital)
     elif article in ("a", "an") or article is None:
+        if inspect.isclass(value):
+            typename = value.__name__
         if article is None:
             return typename
         return add_article(typename, False, capital)
@@ -151,3 +159,32 @@ def add_article(name, definite=False, capital=False):
     else:
         return result
     return result
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Paragraph Manipulations - - - - - - - - - - - - - - - - - - - -
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+def indent(text, spaces=4, tabs=1, clean=False):
+    if "\n" in text:
+        return "\n".join(indent(line, spaces, tabs, clean) for line in text.split("\n"))
+    elif clean:
+        text = re.match(r"(?: *)(.*)", text).groups()[0]
+    return " "*(spaces*tabs) + text
+
+
+def dedent(text, spaces=4, tabs=1, total=False):
+    if "\n" in text:
+        return "\n".join(dedent(line, spaces, tabs, total) for line in text.split("\n"))
+    else:
+        space, text = re.match(r"( *)(.*)", text).groups()
+    if not total:
+        return space[spaces*tabs:] + text
+    else:
+        return text
+
+def wrap_paragraphs(text, width=80):
+    paragraphs = text.split("\n\n")
+    wrapped = (textwrap.wrap(p) for p in paragraphs)
+    return "\n\n".join("\n".join(w) for w in wrapped)

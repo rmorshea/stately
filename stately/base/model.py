@@ -3,15 +3,17 @@ import types
 import inspect
 from inspect import getmembers
 from contextlib import contextmanager
-from metasetup import MetaConfigurable, Configurable
+from metasetup import MetaConfigurable, Configurable, Bunch
 
-from ..utils import describe, Sentinel
+from ..utils import describe, Sentinel, decoration
 
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Python < 3.6 - PEP 487 Descriptor Compatibility - - - - - - - -
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Undefined = Sentinel("Undefined", "no value")
 
+
+# ---------------------------------------------------------------
+# Python < 3.6 - PEP 487 Descriptor Compatibility ---------------
+# ---------------------------------------------------------------
 
 if sys.version_info >= (3, 6):
     Metaclass = MetaConfigurable
@@ -32,12 +34,23 @@ else:
                         getattr(c, name).__init_subclass__(cls)
 
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Base Object For Descriptors - - - - - - - - - - - - - - - - - -
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# ---------------------------------------------------------------
+# Base Object For Descriptors -----------------------------------
+# ---------------------------------------------------------------
 
 
 class Descriptor(object):
+
+    def heritage(self, attr):
+        """Get an attribute of a descriptor, with the same name, on a parent of my class"""
+        for cls in self.owner.mro()[1:]:
+            descriptor = getattr(cls, self.name, None)
+            if isinstance(descriptor, Descriptor):
+                if hasattr(descriptor, attr):
+                    return getattr(descriptor, attr)
+        else:
+            raise AttributeError("There is no descriptor named %r in the lineage "
+                "of %r that has an attribute %r." % (self.name, self.owner, attr))
 
     def __set_name__(self, cls, name):
         self.owner = cls
@@ -58,21 +71,44 @@ class HasDescriptors(Configurable, metaclass=Metaclass):
                 v.__init_instance__(self)
 
 
-
-Undefined = Sentinel("Undefined", "no value")
-
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Data Descriptor Owner Base - - - - - - - - - - - - - - - - - -
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# ---------------------------------------------------------------
+# Objects Settings Loaders --------------------------------------
+# ---------------------------------------------------------------
 
 
-class ObjectModel(HasDescriptors):
+class Loadable(HasDescriptors):
+
+    loaders = ()
+
+    def __init__(self):
+        super(Loadable, self).__init__()
+
+    def loads(self):
+        for c in type(self).mro():
+            if issubclass(c, Loadable) and "loaders" in vars(c):
+                for loader in c.loaders:
+                    yield getattr(self, loader)
+
+    def settings(self, *args, **kwargs):
+        settings = super(Loadable, self).settings(*args, **kwargs)
+        for loader in self.loads():
+            subsettings = loader()
+            if subsettings is not None:
+                settings.merge(subsettings)
+        return settings
+
+
+# ---------------------------------------------------------------
+# Data Descriptor Owner Base ------------------------------------
+# ---------------------------------------------------------------
+
+
+class ObjectModel(Loadable):
 
     def __init__(self, model=None):
         if isinstance(model, ObjectModel):
-            model = model._object_model
-        self._object_model = model or {}
+            model = model._data_model
+        self._data_model = model or {}
         super(ObjectModel, self).__init__()
 
     @classmethod
@@ -80,13 +116,13 @@ class ObjectModel(HasDescriptors):
         return isinstance(getattr(cls, name, None), DataModel)
 
     def has_data_value(self, name):
-        return name in self._object_model
+        return name in self._data_model
     
     @classmethod
     def data_names(cls, **tags):
         result = []
         for k, v in inspect.getmembers(cls):
-            if isinstance(v, DataModel) and v.tags_match(**tags):
+            if isinstance(v, DataModel) and v.has_tags(**tags):
                 result.append(k)
         return result
     
@@ -108,9 +144,9 @@ class ObjectModel(HasDescriptors):
         return result
 
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Base Data Descriptor  - - - - - - - - - - - - - - - - - - - - -
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# ---------------------------------------------------------------
+# Base Data Descriptor ------------------------------------------
+# ---------------------------------------------------------------
 
 
 class DataError(Exception):
@@ -120,67 +156,79 @@ class DataError(Exception):
 
 class DataModel(Descriptor):
 
-    writable = True
-    documentation = ""
-    _constructor = None
-    _constructor_args = ()
-    _constructor_kwargs = {}
-    _default = Undefined
+    tags = {
+        "writable": True,
+        "allow_none": False,
+    }
 
-    def __init__(self, default=Undefined, constructor=None, writable=None):
-        if default is not Undefined:
-            self._default = default
+    constructor = None
+
+    def __init__(self, constructor=None, *args, **kwargs):
         if constructor is not None:
-            if not (callable(constructor) or isinstance(constructor, str)):
-                raise TypeError("A 'constructor' must be callable or string.")
-            self._constructor = constructor
-        if writable is not None:
-            self.writable = writable
-        self.tags = {}
-
-    def docs(self, text):
-        self.documentation = text
-        return self
-
-    def __call__(self, *args, **kwargs):
-        self._constructor_args = args
-        self._constructor_kwargs = kwargs
-        return self
+            self.constructor = constructor
+        self.constructor_args = (args, kwargs)
+        self.tags = Bunch(self.__class__.tags)
 
     def default(self, obj=None):
-        if self._default is Undefined and self._constructor is not None:
-            if obj is not None and isinstance(self._constructor, str):
-                constructor =  getattr(obj, self._constructor)
+        if self.constructor is not None:
+            args, kwargs = self.constructor_args
+            if obj is not None and isinstance(self.constructor, str):
+                return getattr(obj, self.constructor)(*args, **kwargs)
             else:
-                constructor = self._constructor
-            return constructor(*self._constructor_args, **self._constructor_kwargs)
+                return self.constructor(*args, **kwargs)
         else:
-            return self._default
+            return Undefined
 
-    def tag(self, **metadata):
-        self.tags.update(**metadata)
+    def tag(self, **tags):
+        self.tags.update(**tags)
         return self
 
-    def tags_match(self, **tags):
+    def has_tags(self, **tags):
         my_tags = self.tags
         for k, v in tags.items():
-            if not (k in my_tags and (v(my_tags[k]) if callable(v) else v == my_tags)):
-                return False
+            if k in my_tags:
+                if callable(v) and not v(my_tags[k]):
+                    return False
+                elif v != my_tags[k]:
+                    return False
         else:
-            return True
+            return tags == my_tags
+
+    def info(self):
+        return repr(self)
+
+    # Methods Shouldn't Need To Be Overridden
+    # ---------------------------------------
 
     def __get__(self, obj, cls):
-        return self if obj is None else self.get_value(obj)
+        if obj is not None:
+            return self.get_value(obj)
+        else:
+            return self
 
     def __set__(self, obj, val):
-        self.set_value(obj, val)
+        if self.tags.writable:
+            if val is None and self.tags.allow_none:
+                self.model(obj)[self.name] = val
+            else:
+                self.set_value(obj, val)
+        else:
+            raise DataError("Data for %s's %r attribute is not writable"
+                % (describe("an", obj, "object"), self.name))
 
     def __delete__(self, obj):
-        self.del_value(obj)
+        if self.tags.writable:
+            self.del_value(obj)
+        else:
+            raise DataError("Data for %s's %r attribute is not writable"
+                % (describe("an", obj, "object"), self.name))
+
+    # Methods To Overrite In Subclasses
+    # ---------------------------------
 
     def get_value(self, obj):
         try:
-            return obj._object_model[self.name]
+            return self.model(obj)[self.name]
         except KeyError:
             # just in time default generation generally
             # occurs when data is required to generate
@@ -190,18 +238,11 @@ class DataModel(Descriptor):
             return default
 
     def set_value(self, obj, val):
-        if self.writable:
-            obj._object_model[self.name] = val
-        else:
-            raise DataError("Data for the attribute %r of %s is not writable"
-                % (self.name, describe("an", obj)))
+        self.model(obj)[self.name] = val
 
     def del_value(self, obj):
-        if self.writable:
-            del obj._object_model[self.name]
-        else:
-            raise DataError("Data for the attribute %r of %s is not writable"
-                % (self.name, describe("an", obj)))
+        del self.model(obj)[self.name]
 
-    def get_value_or(self, obj, default):
-        return obj._object_model.get(self.name, default)
+    def model(self, obj):
+        "Return the underlying model of the given object"
+        return obj._data_model

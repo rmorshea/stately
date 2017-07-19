@@ -1,5 +1,6 @@
 from stately import Stately
 
+
 class Singleton(Stately):
 
     _instance_ = None
@@ -13,7 +14,7 @@ class Singleton(Stately):
             self = new(cls)
         for cls in cls.mro():
             if issubclass(cls, Singleton):
-                if cls.__dict__.get("_singleton_", False):
+                if vars(cls).get("_singleton_", False):
                     singleton = cls
                     break
         else:

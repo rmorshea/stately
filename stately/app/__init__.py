@@ -1,1 +1,1 @@
-from .app import *
+from .application import *

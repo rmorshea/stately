@@ -1,5 +1,6 @@
+import traceback
 from .model import Descriptor
-from ..utils import Exceptions, last_traceback, raises
+from ..utils import Exceptions
 
 class ProxyDescriptor(Descriptor):
 
@@ -45,45 +46,35 @@ class ProxyManyDescriptors(Descriptor):
             d.__init_instance__(obj)
 
     def __set__(self, obj, val):
-        errors = []
+        errors = Exceptions()
         for d in self._descriptors:
             try:
                 d.__set__(obj, val)
             except Exception as e:
-                tb = last_traceback()
-                errors.append(e)
+                errors.add()
             else:
                 break
         else:
-            if len(errors) == 1:
-                raise errors[0]
-            else:
-                raises(Exceptions(*errors), None, tb)
+            errors.throw()
 
     def __get__(self, obj, cls):
-        errors = []
+        if obj is None:
+            return self
+        errors = Exceptions()
         for d in self._descriptors:
             try:
                 return d.__get__(obj, cls)
             except Exception as e:
-                tb = last_traceback()
-                errors.append(e)
+                errors.add()
         else:
-            if len(errors) == 1:
-                raise errors[0]
-            else:
-                raises(Exceptions(*errors), None, tb)
+            errors.throw()
 
     def __delete__(self, obj):
-        errors = []
+        errors = Exceptions()
         for d in self._descriptors:
             try:
                 return d.__delete__(obj)
             except Exception as error:
-                tb = last_traceback()
-                errors.append(e)
+                errors.add()
         else:
-            if len(errors) == 1:
-                raise errors[0]
-            else:
-                raises(Exceptions(*errors), None, tb)
+            errors.throw()

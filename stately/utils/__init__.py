@@ -1,20 +1,73 @@
 import sys
+import copy
 import inspect
 import functools
-from .interpret import describe
+import traceback
+from .text import describe, indent, dedent, fullname
 from future.utils import raise_ as raises
 
 
-def last_traceback():
-    return sys.exc_info()[2]
+def dictmerge(dicts, reverse=False):
+    new = {}
+    if reverse:
+        dicts = reversed(tuple(dicts))
+    for d in dicts:
+        new.update(d)
+    return new
 
 
-class Exceptions(Exception):
+def flatten(iterable, depth=1):
+    for x in iterable:
+        if depth > 0:
+            yield from flatten(x, depth - 1)
+        else:
+            yield x
 
-    def __init__(self, *errors, **kwargs):
-        prefix = kwargs.get("prefix", "")
-        strings = ("%s(%s)" % (type(e).__name__, str(e)) for e in errors)
-        super(Exceptions, self).__init__(prefix + ", ".join(strings))
+
+def str_to_bool(s):
+    s = s.lower()
+    if s in ("true", "1"):
+        return True
+    elif s in ("false", "0"):
+        return False
+    else:
+        raise ValueError("Expected 'true', 'false', '1', '0' not %r" % s)
+
+
+def class_attribute_lineage(cls, name, base=None):
+    for c in cls.mro():
+        if name is not None:
+            if name in vars(c):
+                yield c, getattr(c, name)
+        elif name in vars(c):
+            yield c, getattr(c, name)
+
+
+def copy_mapping(m):
+    _type = type(m)
+    new = copy.copy(m)
+    for k, v in d.items():
+        if isinstance(v, _type):
+            v = copy_mapping(v)
+        new[k] = v
+    return new
+
+
+class Exceptions(object):
+
+    def __init__(self):
+        self.tracebacks = []
+
+    def add(self):
+        self.tracebacks.append(traceback.format_exc())
+
+    def throw(self):
+        msg = "The following exceptions occured:\n\n"
+        msg += "\n".join(self.tracebacks)
+        raise Exception(msg)
+
+    def __len__(self):
+        return len(self.tracebacks)
 
 
 class Sentinel(object):

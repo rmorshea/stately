@@ -121,15 +121,19 @@ async def run_futures(engine, *args, **kwargs):
     return result
 
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Events Objects  - - - - - - - - - - - - - - - - - - - - - - - -
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# ---------------------------------------------------------------
+# Events Objects ------------------------------------------------
+# ---------------------------------------------------------------
 
 
-class MetaEvent(MetaEngine):
+class MetaEventModel(MetaEngine):
 
     def __init__(cls, name, bases, classdict):
-        super(MetaEvent, cls).__init__(name, bases, classdict)
+        super(MetaEventModel, cls).__init__(name, bases, classdict)
+        if "typename_lineage" in classdict:
+            raise TypeError("The attribute 'typename_lineage' is reserved. To modify it, specify a 'subtypename'")
+        if "typename" in classdict:
+            raise TypeError("The attribute 'typename' is reserved. To modify it, specify a 'subtypename'")
         if "subtypename" in classdict and classdict["subtypename"] is not None:
             cls.subtypename_lineage = cls.subtypename_lineage + [classdict["subtypename"]]
         cls.typename_lineage = tuple(" ".join(reversed(cls.subtypename_lineage[:i]))
@@ -137,7 +141,7 @@ class MetaEvent(MetaEngine):
         cls.typename = cls.typename_lineage[-1]
 
 
-class Event(Engine, metaclass=MetaEvent):
+class EventModel(Engine, metaclass=MetaEventModel):
     
     blueprint = {
         None: "pending",
@@ -149,33 +153,19 @@ class Event(Engine, metaclass=MetaEvent):
     subtypename = "event"
     subtypename_lineage = []
 
-    def __init__(self, data, **attrs):
-        self.data = data
+    def __init__(self, **attrs):
         for k, v in attrs.items():
             setattr(self, k, v)
-
-    @property
-    def get_value(self):
-        return self.data.get_value
-
-    @property
-    def set_value(self):
-        return self.data.set_value
-
-    @property
-    def del_value(self):
-        return self.data.del_value
-
-    @property
-    def get_value_or(self):
-        return self.data.get_value_or
 
     def rollback(self):
         pass
 
+    def info(self):
+        return repr(self)
+
     def __repr__(self):
         info = {}
-        for k, v in self.__dict__.items():
+        for k, v in vars(self).items():
             if not k.startswith("_"):
                 info[k] = v
         cls = type(self)
