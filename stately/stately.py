@@ -61,7 +61,6 @@ class Stately(HasData):
     def __init__(self, *args, **kwargs):
         self._observers = ObserverMapping()
         super(Stately, self).__init__(*args, **kwargs)
-        self.configure()
 
     def observe(self, names=All, typenames=All, statuses=None, observer=None):
 

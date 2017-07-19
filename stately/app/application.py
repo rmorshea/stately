@@ -55,7 +55,7 @@ class Application(Singleton):
         self.log(level, event.info())
 
     def log(self, level, msg, *args, **kwargs):
-        self.logger.log(level, msg, *args **kwargs)
+        self.logger.log(level, msg, *args, **kwargs)
 
     
     # -------------------------------------------------------
@@ -71,9 +71,8 @@ class Application(Singleton):
             for k in settings:
                 if k not in keys:
                     cls = type(self)
-                    msg = "The setting '%s.%s.%s' does not exist." % (
-                        cls.__module__, cls.__name__, k)
-                    self.log(failure_level, msg)
+                    msg = "The setting '%s.%s.%s' does not exist."
+                    self.log(failure_level, msg, cls.__module__, cls.__name__, k)
 
     # Evironment Variables
     # --------------------

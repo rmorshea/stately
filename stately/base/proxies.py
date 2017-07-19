@@ -1,6 +1,6 @@
 import traceback
 from .model import Descriptor
-from ..utils import Exceptions
+from ..utils import ErrorGroup
 
 class ProxyDescriptor(Descriptor):
 
@@ -33,6 +33,10 @@ class ProxyManyDescriptors(Descriptor):
         self._descriptors = descriptors
         super(ProxyManyDescriptors, self).__init__(**kwargs)
 
+    @property
+    def descriptors(self):
+        return self._descriptors[:]
+
     def __set_name__(self, cls, name):
         for d in self._descriptors:
             d.__set_name__(cls, name)
@@ -46,7 +50,7 @@ class ProxyManyDescriptors(Descriptor):
             d.__init_instance__(obj)
 
     def __set__(self, obj, val):
-        errors = Exceptions()
+        errors = ErrorGroup()
         for d in self._descriptors:
             try:
                 d.__set__(obj, val)
@@ -60,7 +64,7 @@ class ProxyManyDescriptors(Descriptor):
     def __get__(self, obj, cls):
         if obj is None:
             return self
-        errors = Exceptions()
+        errors = ErrorGroup()
         for d in self._descriptors:
             try:
                 return d.__get__(obj, cls)
@@ -70,7 +74,7 @@ class ProxyManyDescriptors(Descriptor):
             errors.throw()
 
     def __delete__(self, obj):
-        errors = Exceptions()
+        errors = ErrorGroup()
         for d in self._descriptors:
             try:
                 return d.__delete__(obj)

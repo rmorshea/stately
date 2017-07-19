@@ -3,7 +3,7 @@ import copy
 import inspect
 import functools
 import traceback
-from .text import describe, indent, dedent, fullname
+from .text import describe, describe_them, fullname, conjunction
 from future.utils import raise_ as raises
 
 
@@ -53,7 +53,7 @@ def copy_mapping(m):
     return new
 
 
-class Exceptions(object):
+class ErrorGroup(object):
 
     def __init__(self):
         self.tracebacks = []

@@ -195,7 +195,10 @@ class DataModel(Descriptor):
             return tags == my_tags
 
     def info(self):
-        return repr(self)
+        info = "any value"
+        if not self.allow_none:
+            info += " except None"
+        return info
 
     # Methods Shouldn't Need To Be Overridden
     # ---------------------------------------
@@ -208,19 +211,23 @@ class DataModel(Descriptor):
 
     def __set__(self, obj, val):
         if self.tags.writable:
-            if val is None and self.tags.allow_none:
-                self.model(obj)[self.name] = val
+            if val is None:
+                if self.tags.allow_none:
+                    self.model(obj)[self.name] = val
+                else:
+                    raise DataError("The data of %s's %r attribute can be %s"
+                        % (describe("an", obj, "object"), self.name, self.info()))
             else:
                 self.set_value(obj, val)
         else:
-            raise DataError("Data for %s's %r attribute is not writable"
+            raise DataError("The data of %s's %r attribute is not writable"
                 % (describe("an", obj, "object"), self.name))
 
     def __delete__(self, obj):
         if self.tags.writable:
             self.del_value(obj)
         else:
-            raise DataError("Data for %s's %r attribute is not writable"
+            raise DataError("The data of %s's %r attribute is not writable"
                 % (describe("an", obj, "object"), self.name))
 
     # Methods To Overrite In Subclasses

@@ -2,7 +2,7 @@ import functools
 from warnings import WarningMessage
 from contextlib import contextmanager
 
-from .utils import describe
+from .utils import describe, describe_them, conjunction
 
 from .base.proxies import ProxyManyDescriptors
 from .base.events import EventModel, before, after, between
@@ -76,19 +76,19 @@ class HasData(ObjectModel):
 
 class Data(DataModel):
 
-    def validate(self, value):
-        if self.can_coerce(value):
-            value = self.coerce(value)
-        self.authorize(value)
-        return value
+    def validate(self, obj, val):
+        if self.can_coerce(obj, val):
+            value = self.coerce(obj, val)
+        self.authorize(obj, val)
+        return val
 
-    def can_coerce(self, value):
+    def can_coerce(self, obj, val):
         return False
 
-    def coerce(self, value):
+    def coerce(self, obj, val):
         raise NotImplementedError()
 
-    def authorize(self, value):
+    def authorize(self, obj, val):
         pass
 
     def set_value(self, obj, val):
@@ -115,7 +115,7 @@ class Data(DataModel):
 
         @between("pending", "working")
         def validating(self, obj):
-            self.new = self.data.validate(self.new)
+            self.new = self.data.validate(obj, self.new)
 
         def working(self, obj):
             self.model(obj)[self.name] = self.new
@@ -140,7 +140,7 @@ class Data(DataModel):
 
     def __or__(self, other):
         if isinstance(other, Union):
-            return Union(self, *other._descriptors)
+            return Union(self, *other.descriptors)
         elif isinstance(other, Data):
             return Union(self, other)
         else:
@@ -156,9 +156,9 @@ class Union(ProxyManyDescriptors, DataModel):
     
     def __or__(self, other):
         if isinstance(other, Data):
-            return Union(*(self._descriptors + other._descriptors))
+            return Union(*(self.descriptors + other.descriptors))
         elif isinstance(other, Data):
-            return Union(*(self._descriptors + (other,)))
+            return Union(*(self.descriptors + (other,)))
         else:
             raise TypeError("Cannot form a Union between non-Data types")
 
@@ -178,25 +178,40 @@ class DataType(Data):
             raise TypeError("%s has no given 'datatype'" % describe("The", type(self)))
 
     def constructor(self, *args, **kwargs):
-        return self.datatype(*args, **kwargs)
+        datatype = self.datatype
+        if isinstance(datatype, tuple):
+            datatype = datatype[0] 
+        return datatype(*args, **kwargs)
+
+    def info(self):
+        if isinstance(self.datatype, tuple):
+            text = conjunction("or", *describe_them("a", self.datatype))
+        else:
+            text = describe("a", self.datatype)
+        if self.allow_none:
+            text = "None, " + text
+        return text
+
 
 
 class Subclass(DataType):
 
-    def authorize(self, value):
-        if not issubclass(value, self.datatype):
-            raise DataError("Expected %s, not %s" % (
-                describe("a", self.datatype, "subclass"),
-                describe("the", value)))
+    def authorize(self, obj, val):
+        if not issubclass(val, self.datatype):
+            msg = "The data of %s's %r attribute can be %s, not %s"
+            raise DataError(msg % (describe("an", obj, "object"),
+                self.name, describe("a", self.datatype, "subclass"),
+                describe("the", val)))
 
 
 class Instance(DataType):
 
-    def authorize(self, value):
-        if not isinstance(value, self.datatype):
-            raise DataError("Expected %s, not %s" % (
-                describe("a", self.datatype),
-                describe("the", value)))
+    def authorize(self, obj, val):
+        if not isinstance(val, self.datatype):
+            msg = "The data of %s's %r attribute can be %s, not %s"
+            raise DataError(msg % (describe("an", obj, "object"),
+                self.name, describe("a", self.datatype),
+                describe("the", val)))
 
 
 class This(Instance):

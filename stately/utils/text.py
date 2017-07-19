@@ -161,6 +161,24 @@ def add_article(name, definite=False, capital=False):
     return result
 
 
+def describe_them(article, values, *args, **kwargs):
+    if len(values) == 0:
+        return []
+    elif len(values) == 1:
+        return [describe(article, values[0], *args, **kwargs)]
+    else:
+        return [describe(article, v, *args, **kwargs) for v in values]
+
+
+def conjunction(junction, *texts):
+    if len(texts) > 1:
+        return ", ".join(texts[:-1]) + ", %s %s" % (junction, texts[-1])
+    elif len(texts) == 1:
+        return texts[0]
+    else:
+        return ""
+
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Paragraph Manipulations - - - - - - - - - - - - - - - - - - - -
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
