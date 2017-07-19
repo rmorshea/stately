@@ -2,7 +2,7 @@ import types
 
 from .base.model import Descriptor
 from .utils import Sentinel, describe, decoration
-from .data import HasData, Data, Event
+from .traits import HasTraits, Trait, Event, TraitError
 
 
 # ---------------------------------------------------------------
@@ -10,16 +10,16 @@ from .data import HasData, Data, Event
 # ---------------------------------------------------------------
 
 
-def parse_data_names(owner, names, tags=None):
+def parse_trait_names(owner, names, tags=None):
     if names is All:
-        return owner.data_names(**(tags or {}))
+        return owner.trait_names(**(tags or {}))
     elif isinstance(names, str):
         names = [names]
     if isinstance(names, dict):
-        return owner.data_names(**names)
+        return owner.trait_names(**names)
     for n in names:
-        if not owner.has_data(n):
-            raise DataError("%s has no data named %r" % (describe("the", owner), n))
+        if not owner.has_trait(n):
+            raise TraitError("%s has no trait named %r" % (describe("the", owner), n))
     return names
 
 
@@ -56,7 +56,7 @@ All = Sentinel("All", "all values")
 # ---------------------------------------------------------------
 
 
-class Stately(HasData):
+class Stately(HasTraits):
 
     def __init__(self, *args, **kwargs):
         self._observers = ObserverMapping()
@@ -65,7 +65,7 @@ class Stately(HasData):
     def observe(self, names=All, typenames=All, statuses=None, observer=None):
 
         def setup(observer):
-            for n in parse_data_names(self, names):
+            for n in parse_trait_names(self, names):
                 for t in parse_typenames(typenames):
                     for s in parse_statuses(statuses):
                         self._observers.add(n, t, s, observer)
@@ -242,4 +242,4 @@ class ObserverMapping(object):
                         del tmap[name]
 
     def _to_components(self, event):
-        return event.data.name, event.typename_lineage, event.status
+        return event.trait.name, event.typename_lineage, event.status

@@ -99,7 +99,7 @@ class Loadable(HasDescriptors):
 
 
 # ---------------------------------------------------------------
-# Data Descriptor Owner Base ------------------------------------
+# Trait Descriptor Owner Base ------------------------------------
 # ---------------------------------------------------------------
 
 
@@ -107,54 +107,60 @@ class ObjectModel(Loadable):
 
     def __init__(self, model=None):
         if isinstance(model, ObjectModel):
-            model = model._data_model
-        self._data_model = model or {}
+            model = model._model
+        self._model = model or {}
         super(ObjectModel, self).__init__()
 
     @classmethod
-    def has_data(cls, name):
-        return isinstance(getattr(cls, name, None), DataModel)
+    def has_trait(cls, name):
+        return isinstance(getattr(cls, name, None), TraitModel)
 
-    def has_data_value(self, name):
-        return name in self._data_model
+    def trait_values(self, **tags):
+        model = {}
+        for n in self.trait_names(**tags):
+            model[n] = getattr(self, n)
+        return model
+
+    def has_trait_value(self, name):
+        return name in self._model
     
     @classmethod
-    def data_names(cls, **tags):
+    def trait_names(cls, **tags):
         result = []
         for k, v in inspect.getmembers(cls):
-            if isinstance(v, DataModel) and v.has_tags(**tags):
+            if isinstance(v, TraitModel) and v.has_tags(**tags):
                 result.append(k)
         return result
     
     @classmethod
-    def data_defaults(cls, **tags):
+    def trait_defaults(cls, **tags):
         model = {}
-        for k, t in cls.data(**tags).items():
+        for k, t in cls.traits(**tags).items():
             default = t.default
             if default is not Undefined:
                 model[k] = default
         return state
     
     @classmethod
-    def data(cls, **tags):
+    def traits(cls, **tags):
         result = {}
         for k, v in inspect.getmembers(cls):
-            if isinstance(v, DataModel) and v.tags_match(**tags):
+            if isinstance(v, TraitModel) and v.tags_match(**tags):
                 result[k] = v
         return result
 
 
 # ---------------------------------------------------------------
-# Base Data Descriptor ------------------------------------------
+# Base Trait Descriptor ------------------------------------------
 # ---------------------------------------------------------------
 
 
-class DataError(Exception):
-    """An error raise in relation to a DataModel"""
+class TraitError(Exception):
+    """An error raise in relation to a TraitModel"""
     pass
 
 
-class DataModel(Descriptor):
+class TraitModel(Descriptor):
 
     tags = {
         "writable": True,
@@ -215,20 +221,20 @@ class DataModel(Descriptor):
                 if self.tags.allow_none:
                     self.model(obj)[self.name] = val
                 else:
-                    raise DataError("The data of %s's %r attribute can be %s"
-                        % (describe("an", obj, "object"), self.name, self.info()))
+                    raise TraitError("%s's %r attribute can be %s"
+                        % (describe("An", obj, "object"), self.name, self.info()))
             else:
                 self.set_value(obj, val)
         else:
-            raise DataError("The data of %s's %r attribute is not writable"
-                % (describe("an", obj, "object"), self.name))
+            raise TraitError("%s's %r attribute is not writable"
+                % (describe("An", obj, "object"), self.name))
 
     def __delete__(self, obj):
         if self.tags.writable:
             self.del_value(obj)
         else:
-            raise DataError("The data of %s's %r attribute is not writable"
-                % (describe("an", obj, "object"), self.name))
+            raise TraitError("%s's %r attribute is not writable"
+                % (describe("An", obj, "object"), self.name))
 
     # Methods To Overrite In Subclasses
     # ---------------------------------
@@ -238,8 +244,8 @@ class DataModel(Descriptor):
             return self.model(obj)[self.name]
         except KeyError:
             # just in time default generation generally
-            # occurs when data is required to generate
-            # the default of some other data
+            # occurs when information about an object is
+            # required to generate the default of a trait
             default = self.default(obj)
             self.set_value(obj, default)
             return default
@@ -252,4 +258,4 @@ class DataModel(Descriptor):
 
     def model(self, obj):
         "Return the underlying model of the given object"
-        return obj._data_model
+        return obj._model

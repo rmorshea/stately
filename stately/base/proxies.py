@@ -1,5 +1,5 @@
 import traceback
-from .model import Descriptor
+from .model import Descriptor, TraitModel
 from ..utils import ErrorGroup
 
 class ProxyDescriptor(Descriptor):
@@ -27,7 +27,7 @@ class ProxyDescriptor(Descriptor):
         delattr(self._descriptor, name)
 
 
-class ProxyManyDescriptors(Descriptor):
+class ProxyManyDescriptors(TraitModel):
 
     def __init__(self, *descriptors, **kwargs):
         self._descriptors = descriptors

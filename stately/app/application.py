@@ -65,7 +65,7 @@ class Application(Singleton):
     loaders = ("env_settings", "cli_settings")
 
     def configure(self, failure_level=None, *args, **kwargs):
-        keys = self.data_names(setting=True)
+        keys = self.trait_names(setting=True)
         settings = super(Application, self).configure(keys=keys, *args, **kwargs)
         if failure_level is not None:
             for k in settings:

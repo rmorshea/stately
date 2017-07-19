@@ -6,30 +6,30 @@ from .utils import describe, describe_them, conjunction
 
 from .base.proxies import ProxyManyDescriptors
 from .base.events import EventModel, before, after, between
-from .base.model import ObjectModel, DataModel, DataError, Undefined
+from .base.model import ObjectModel, TraitModel, TraitError, Undefined
 
 
 # ---------------------------------------------------------------
-# Data Descriptor, Event, and Owner -----------------------------
+# Trait Descriptor, Event, and Owner -----------------------------
 # ---------------------------------------------------------------
 
 
 class RollbackWarning(WarningMessage):
-    """A warning which is raised when a data event fails to revert changes"""
+    """A warning which is raised when a trait event fails to revert changes"""
     pass
 
 
 class Event(EventModel):
 
-    def __init__(self, data, **attrs):
-        super(Event, self).__init__(data=data, name=data.name, **attrs)
-        self.data = data
+    def __init__(self, trait, **attrs):
+        super(Event, self).__init__(trait=trait, name=trait.name, **attrs)
+        self.trait = trait
 
     def model(self, obj):
-        return self.data.model(obj)
+        return self.trait.model(obj)
 
 
-class HasData(ObjectModel):
+class HasTraits(ObjectModel):
 
     @contextmanager
     def delayed_events(self, *include):
@@ -70,11 +70,11 @@ class HasData(ObjectModel):
             del self.actualize_event
 
     def actualize_event(self, event):
-        raise NotImplementedError("HasData subclasses "
+        raise NotImplementedError("HasTraits subclasses "
             "must define how they will handle events.")
 
 
-class Data(DataModel):
+class Trait(TraitModel):
 
     def validate(self, obj, val):
         if self.can_coerce(obj, val):
@@ -115,7 +115,7 @@ class Data(DataModel):
 
         @between("pending", "working")
         def validating(self, obj):
-            self.new = self.data.validate(obj, self.new)
+            self.new = self.trait.validate(obj, self.new)
 
         def working(self, obj):
             self.model(obj)[self.name] = self.new
@@ -141,34 +141,34 @@ class Data(DataModel):
     def __or__(self, other):
         if isinstance(other, Union):
             return Union(self, *other.descriptors)
-        elif isinstance(other, Data):
+        elif isinstance(other, Trait):
             return Union(self, other)
         else:
-            raise TypeError("Cannot form a Union between non-Data types")
+            raise TypeError("Cannot form a Union between non-Trait types")
 
 
 # ---------------------------------------------------------------
-# Basic Data Subclasses -----------------------------------------
+# Basic Trait Subclasses -----------------------------------------
 # ---------------------------------------------------------------
 
 
-class Union(ProxyManyDescriptors, DataModel):
+class Union(ProxyManyDescriptors):
     
     def __or__(self, other):
-        if isinstance(other, Data):
+        if isinstance(other, Trait):
             return Union(*(self.descriptors + other.descriptors))
-        elif isinstance(other, Data):
+        elif isinstance(other, Trait):
             return Union(*(self.descriptors + (other,)))
         else:
-            raise TypeError("Cannot form a Union between non-Data types")
+            raise TypeError("Cannot form a Union between non-Trait types")
 
 
-class DataType(Data):
+class Type(Trait):
 
     datatype = None
 
     def __init__(self, datatype=None, *args, **kwargs):
-        super(DataType, self).__init__(*args, **kwargs)
+        super(Type, self).__init__(*args, **kwargs)
         if datatype is not None:
             if self.datatype is None or issubclass(datatype, self.datatype):
                 self.datatype = datatype
@@ -194,22 +194,22 @@ class DataType(Data):
 
 
 
-class Subclass(DataType):
+class Subclass(Type):
 
     def authorize(self, obj, val):
         if not issubclass(val, self.datatype):
-            msg = "The data of %s's %r attribute can be %s, not %s"
-            raise DataError(msg % (describe("an", obj, "object"),
+            msg = "%s's %r attribute can be %s, not %s"
+            raise TraitError(msg % (describe("An", obj, "object"),
                 self.name, describe("a", self.datatype, "subclass"),
                 describe("the", val)))
 
 
-class Instance(DataType):
+class Instance(Type):
 
     def authorize(self, obj, val):
         if not isinstance(val, self.datatype):
-            msg = "The data of %s's %r attribute can be %s, not %s"
-            raise DataError(msg % (describe("an", obj, "object"),
+            msg = "%s's %r attribute can be %s, not %s"
+            raise TraitError(msg % (describe("An", obj, "object"),
                 self.name, describe("a", self.datatype),
                 describe("the", val)))
 
